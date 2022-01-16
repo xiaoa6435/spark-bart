@@ -4,6 +4,8 @@ import bart.discretizer.TreePoint
 import bart.sampler.tree.{ChangeProposer, GrowProposer, PruneProposer, TreeMutationProposer}
 import bart.tree.{LearningNode, SufficientStat}
 import bart.{ParArr, ParArrOrSeqArr, SeqArr}
+import breeze.stats.distributions.{Exponential, Uniform}
+import org.apache.commons.math3.distribution.NormalDistribution
 
 case class ForestPara (
   featIndexes: Array[Int],
@@ -52,6 +54,84 @@ class ForestSampler(
       val proposer = proposerSampler(topNode, treeId, sigmaSquareSampler, tauSampler)
       proposer.update()
     })
+  }
+
+  def predict(point: TreePoint): Double = {
+    value.map(tree => tree.predict(point.binnedFeatures)).sum
+  }
+
+//  def sampleZi(z: Double, y: Double): Double = {
+//    val u = util.Random.nextDouble
+//    val g = new NormalDistribution
+//    if (y.round == 1L) {
+//      z + g.inverseCumulativeProbability((1 - u) * g.cumulativeProbability(-z) + u)
+//    } else {
+//      z - g.inverseCumulativeProbability((1 - u) * g.cumulativeProbability(z) + u)
+//    }
+//  }
+
+  def sampleZi(z: Double, y: Double): Double = {
+    if (y.round == 1L) {
+      rtnorm(z, lower = 0.0)
+    } else {
+      rtnorm(z, upper = 0.0)
+    }
+  }
+
+  def updateResidual(): Unit = {
+    df.foreach{point =>
+      val oldResp = predict(point)
+      val newResp = sampleZi(oldResp, point.label)
+      //point.setResidual(point.getResidual(chainId) + oldResp - newResp, chainId)
+      point.setResidual(point.getResidual(chainId) + newResp - oldResp, chainId)
+    }
+  }
+
+  def rtnorm(
+    m: Double = 0,
+    sd: Double = 1,
+    lower: Double = Double.NegativeInfinity,
+    upper: Double = Double.PositiveInfinity): Double = {
+    require(upper > lower, "upper must gt lower")
+    require(sd != 0, "sd should not equal 0")
+
+    val (l_s, u_s, is_mirror) = if (upper <= m) {
+      (-(upper - m) / sd, -(lower - m) / sd, true)
+    } else {
+      ((lower - m) / sd, (upper - m) / sd, false)
+    }
+    var r = 0.0
+    if (l_s < 0.0 && u_s > 0.0 && u_s - l_s > math.sqrt(2 * math.Pi)) {
+      val rngNorm = new NormalDistribution(0, 1)
+      r = rngNorm.sample()
+      while (!(r >= l_s && r < u_s)) {
+        r = rngNorm.sample()
+      }
+      return r + sd * m
+    }
+
+    val ls2p4 = math.sqrt(l_s * l_s + 4)
+    val a_double = l_s + ls2p4
+    val a = a_double / 2.0
+    val l1subls2p4 = math.sqrt(math.exp(1)) / a_double
+    if (l_s >= 0.0 && (u_s > l_s + 2 * l1subls2p4 * math.exp((l_s * 2 - l_s * ls2p4) / 4))) {
+      val rngUnif = new Uniform(0, 1)
+      val rngExp = new Exponential(a)
+      r = rngExp.sample() + l_s
+      while (!(rngUnif.sample() <= math.exp(-(r - a) * (r - a) / 2) && r < u_s)) {
+        r = rngExp.sample() + l_s
+      }
+    } else {
+      val rngUnif_lu = new Uniform(l_s, u_s)
+      val rngUnif_0l = new Uniform(0.0, 1.0)
+      r = rngUnif_lu.sample()
+      var rho = if (l_s > 0) math.exp((l_s * l_s - r * r) / 2) else math.exp(-r * r / 2)
+      while (rngUnif_0l.sample() > rho) {
+        r = rngUnif_lu.sample()
+        rho = if (l_s > 0) math.exp((l_s * l_s - r * r) / 2) else math.exp(-r * r / 2)
+      }
+    }
+    (if (is_mirror) -r else r) * sd + m
   }
 
   // for debug

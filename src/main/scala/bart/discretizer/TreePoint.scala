@@ -130,8 +130,7 @@ object TreePoint {
     val (resp, feat, init, residual) = metadata match {
       case m: BARTMetadata =>
         val scaleLabel = m.inputSummarizer.minMaxScaleLabel(label)
-        val rawLabelMean = m.inputSummarizer.labelSummarizer.mean
-
+        //val rawLabelMean = m.inputSummarizer.labelSummarizer.mean
         //val scaleLabelMean = m.inputSummarizer.scaleLabel(rawLabelMean)
 //        val scaleLabelMean = 0.0
 //        val residual = scaleLabel - scaleLabelMean

@@ -1,4 +1,4 @@
-package org.apache.spark.ml.regression
+package org.apache.spark.ml.classification
 
 import bart.configuration.{BARTMetadata, InputSummarizer}
 import bart.discretizer.{FindSplits, TreePoint}
@@ -15,23 +15,23 @@ import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.types.DoubleType
 
-//trait BayesAdditiveTreeRegressorParams extends BayesAdditiveTreeParams
 /**
  * <a href="http://en.wikipedia.org/wiki/Decision_tree_learning">Decision tree</a>
- * learning algorithm for regression.
+ * learning algorithm for Classification.
  * It supports both continuous and categorical features.
  */
-class BayesAdditiveTreeRegressor (override val uid: String)
-  extends Regressor[Vector, BayesAdditiveTreeRegressor, BayesAdditiveTreeRegressionModel]
+
+class BayesAdditiveTreeClassifier (override val uid: String)
+  extends Classifier[Vector, BayesAdditiveTreeClassifier, BayesAdditiveTreeClassificationModel]
     with BayesAdditiveTreeParams with DefaultParamsWritable {
 
-  def this() = this(Identifiable.randomUID("bart"))
+  def this() = this(Identifiable.randomUID("bact"))
 
   /** @group setParam */
   def setSd(value: Double): this.type = set(sd, value)
-  setDefault(sd -> 0.25)
+  setDefault(sd -> 1.50)
 
-  def _extractInstances(dataset: Dataset[_]): RDD[bart.Instance] = {
+  def _extractInstances(dataset: Dataset[_], numClasses: Int = 2): RDD[bart.Instance] = {
     val w = this match {
       case p: HasWeightCol =>
         if (isDefined(p.weightCol) && $(p.weightCol).nonEmpty) {
@@ -43,11 +43,16 @@ class BayesAdditiveTreeRegressor (override val uid: String)
 
     dataset.select(col($(labelCol)).cast(DoubleType), w, col($(featuresCol))).rdd.map {
       case Row(label: Double, weight: Double, features: Vector) =>
+        require(label.toLong == label && label >= 0 && label < numClasses, s"Classifier was given" +
+          s" dataset with invalid label $label. Labels must be integers in range" +
+          s" [0, $numClasses).")
         bart.Instance(label, features.toArray, weight)
     }
   }
-  override protected def train(
-    dataset: Dataset[_]): BayesAdditiveTreeRegressionModel = instrumented { instr =>
+
+  //override protected def train(
+  override def train(
+    dataset: Dataset[_]): BayesAdditiveTreeClassificationModel = instrumented { instr =>
 
     val instances = _extractInstances(dataset)
     instr.logPipelineStage(this)
@@ -62,6 +67,7 @@ class BayesAdditiveTreeRegressor (override val uid: String)
       $(minInstancesPerNode), $(probGrow), $(probPrune), $(probChange),
       $(lambdaRaw), $(q), $(nu)
     )
+
     val splits = FindSplits.findSplits(instances, metadata, seed = $(seed))
     val treeInput = TreePoint.convertToTreeRDD(instances, splits, metadata)
 
@@ -69,7 +75,7 @@ class BayesAdditiveTreeRegressor (override val uid: String)
       repartition(metadata.parallelChainCnt).
       mapPartitionsWithIndex{case (parallelChainId, iter)=>
         val dfSeq = new bart.SeqArr(iter.toArray)
-        val chain = Chain(dfSeq, metadata, parallelChainId)
+        val chain = Chain(dfSeq, metadata, parallelChainId, isClassifier = true)
         chain.run(metadata.numBurn)
         val iResForest = chain.run(
           metadata.numSim, metadata.numThin, splits)
@@ -77,9 +83,8 @@ class BayesAdditiveTreeRegressor (override val uid: String)
       }.collect().map(_.toSeq).toSeq
     val minValue = inputSummarizer.labelSummarizer.min
     val minMaxScale = inputSummarizer.minMaxScale
-    new BayesAdditiveTreeRegressionModel(resForest, minValue, minMaxScale)
+    new BayesAdditiveTreeClassificationModel(resForest, minValue, minMaxScale)
   }
-
-  override def copy(extra: ParamMap): BayesAdditiveTreeRegressor = defaultCopy(extra)
+  override def copy(extra: ParamMap): BayesAdditiveTreeClassifier = defaultCopy(extra)
 }
 

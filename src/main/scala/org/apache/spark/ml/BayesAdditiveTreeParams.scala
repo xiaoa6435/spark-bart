@@ -1,9 +1,7 @@
 package org.apache.spark.ml
 
-import org.apache.spark.ml.classification.ProbabilisticClassifierParams
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * Parameters for Decision Tree-based algorithms.
@@ -151,8 +149,8 @@ trait BayesAdditiveTreeParams extends PredictorParams
     ParamValidators.gtEq(0.0))
   /** @group getParam */
   final def getSd: Double = $(sd)
-  /** @group setParam */
-  final def setSd(value: Double): this.type = set(sd, value)
+//  /** @group setParam */
+//  final def setSd(value: Double): this.type = set(sd, value)
 
   final val lambdaRaw: DoubleParam = new DoubleParam(this, "lambdaRaw", "lambdaRaw",
     ParamValidators.gtEq(0.0))
@@ -182,38 +180,7 @@ trait BayesAdditiveTreeParams extends PredictorParams
     chainCnt -> 1, parallelChainCnt -> 1, minInstancesPerNode -> 1,
     numTrees -> 200, numBurn -> 1000, numSim -> 100, numThin -> 5,
     probGrow -> 2.5 / 9.0, probPrune -> 2.5 / 9.0, probChange -> 4.0 / 9.0,
-    alpha -> 0.95, beta -> 2.0, sd -> 0.25,
+    alpha -> 0.95, beta -> 2.0,
     lambdaRaw -> 0.0, q -> 0.9, nu -> 3.0
-//    maxMemoryInMB -> 256, cacheNodeIds -> false, checkpointInterval -> 10
   )
-
-}
-
-/**
- * Parameters for Decision Tree-based classification algorithms.
- */
-
-trait BayesAdditiveTreeClassifierParams
-  extends BayesAdditiveTreeParams with ProbabilisticClassifierParams {
-
-  override protected def validateAndTransformSchema(
-    schema: StructType,
-    fitting: Boolean,
-    featuresDataType: DataType): StructType = {
-    val outputSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
-    outputSchema
-  }
-}
-
-/**
- * Parameters for Decision Tree-based regression algorithms.
- */
-trait BayesAdditiveTreeRegressorParams extends BayesAdditiveTreeParams {
-  override protected def validateAndTransformSchema(
-    schema: StructType,
-    fitting: Boolean,
-    featuresDataType: DataType): StructType = {
-    val outputSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
-    outputSchema
-  }
 }

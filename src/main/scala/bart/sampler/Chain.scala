@@ -8,19 +8,27 @@ class Chain (
   val sigmaSquare: SigmaSquareSampler,
   val halfNorm: HalfNormSampler,
   val scale: Double,
-  val parallelChainId: Int
+  val parallelChainId: Int,
+  val isClassifier: Boolean = false
 ) extends Serializable {
 
   sigmaSquare.update(forest.residualsSquareSum)
 
   def sample(i: Int = 0): Unit = {
+
+    if (isClassifier) {
+      forest.updateResidual()
+    } else {
+      sigmaSquare.update(forest.residualsSquareSum)
+    }
+
     forest.update((sigmaSquare, halfNorm))
     val rmse = math.pow(forest.residualsSquareSum * scale, 0.5)
     println(
       s"parallelChainId: $parallelChainId, chainId: ${forest.chainId}, i: $i " +
         forest.df.head.resp.map(r => r.formatted("%+4.3f")).toList.toString +
         s" rmse: ${rmse.formatted("%+4.3f")}")
-    sigmaSquare.update(forest.residualsSquareSum)
+
   }
 
   def run(numBurn: Int): Unit = {
@@ -59,17 +67,18 @@ object Chain {
   def apply(
     df: ParArrOrSeqArr[TreePoint],
     metadata: bart.configuration.BARTMetadata,
-    parallelChainId: Int
+    parallelChainId: Int,
+    isClassifier: Boolean = false
   ): Chain = {
     val chainId = metadata.forestPara.chainId
     val forest = new ForestSampler(metadata.forestPara, df)
     val sigmaSquare = new SigmaSquareSampler(
       metadata.sigmaSquarePara, chainId)
-    sigmaSquare.update(forest.residualsSquareSum)
+    //sigmaSquare.update(forest.residualsSquareSum)
     val halfNorm = new HalfNormSampler(metadata.tauPara, chainId)
     val weightedCount = df.map(_.weight).reduce(_ + _)
     val minMaxScale = metadata.inputSummarizer.minMaxScale
     val scale = math.pow(minMaxScale, 2) / weightedCount
-    new Chain(forest, sigmaSquare, halfNorm, scale, parallelChainId)
+    new Chain(forest, sigmaSquare, halfNorm, scale, parallelChainId, isClassifier)
   }
 }

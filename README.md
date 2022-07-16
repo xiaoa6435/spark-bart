@@ -1,7 +1,6 @@
 # spark-bart
 A pure scala/spark implementation of the BART(bayes additive regressions trees model of [Chipman et al](https://arxiv.org/abs/0806.3286) and related model, like BACT(bayes additive classification tree), BCF(bayes causal forest) etc
 
-this project is currently **working in progress**
 
 # example
 ```
